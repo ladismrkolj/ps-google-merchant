@@ -41,7 +41,7 @@ class Gmcfeedmanager extends Module
     {
         $this->name = 'gmcfeedmanager';
         $this->tab = 'smart_shopping';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'Vladimir Smrkolj';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -136,7 +136,7 @@ class Gmcfeedmanager extends Module
         $tab = new Tab();
         $tab->class_name = self::ADMIN_CONTROLLER;
         $tab->module = $this->name;
-        $tab->id_parent = (int) Tab::getIdFromClassName('CONFIGURE');
+        $tab->id_parent = $this->resolveParentTabId();
         $tab->icon = 'shopping_basket';
 
         foreach (Language::getLanguages(false) as $lang) {
@@ -144,6 +144,25 @@ class Gmcfeedmanager extends Module
         }
 
         return $tab->add();
+    }
+
+    /**
+     * Finds a sensible, always-present parent menu to nest our tab under
+     * (the "Modules" section). Falls back to 0 (a standalone top-level
+     * entry) rather than letting a missing/renamed core tab abort the
+     * whole install -- an unnested tab is still reachable, an install
+     * that silently fails is not.
+     */
+    private function resolveParentTabId(): int
+    {
+        foreach (['AdminParentModulesSf', 'AdminParentModules', 'AdminModules'] as $candidate) {
+            $idParent = (int) Tab::getIdFromClassName($candidate);
+            if ($idParent > 0) {
+                return $idParent;
+            }
+        }
+
+        return 0;
     }
 
     private function uninstallTab(): void
