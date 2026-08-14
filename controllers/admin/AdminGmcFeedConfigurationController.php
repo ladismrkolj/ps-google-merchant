@@ -19,21 +19,29 @@ use GmcFeedManager\Service\GoogleCategoryService;
  * diagnostics dashboard, all on one page (Bootstrap nav-tabs).
  *
  * This is a fully custom "view" screen rather than the usual
- * AdminController list/form pair, so $this->table is intentionally left
- * unset and rendering goes through renderView() (see AdminControllerCore::
- * initContent(), which dispatches to renderView() when $this->display ===
- * 'view').
+ * AdminController list/form pair: $this->table is only set to a harmless
+ * real table so core bootstrapping has something to look at, and rendering
+ * goes through renderView() (see AdminControllerCore::initContent(), which
+ * dispatches to renderView() when $this->display === 'view') rather than
+ * the default renderList()/renderForm().
  */
 class AdminGmcFeedConfigurationController extends ModuleAdminController
 {
     public function __construct()
     {
+        // A harmless, real core table so AdminController's own bootstrapping
+        // (which references $this->table before we get a say) has something
+        // valid to look at; we never render a list/form off it.
+        $this->table = 'configuration';
+        $this->identifier = 'id_configuration';
         $this->bootstrap = true;
-        $this->display = 'view';
-        $this->show_toolbar = false;
 
         parent::__construct();
 
+        // Must be set *after* parent::__construct(), which otherwise
+        // resets $this->display to its own default ('list').
+        $this->display = 'view';
+        $this->show_toolbar = false;
         $this->meta_title = $this->l('Google Merchant Feed Manager');
     }
 
