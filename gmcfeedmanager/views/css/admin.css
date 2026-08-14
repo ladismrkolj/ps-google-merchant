@@ -1,0 +1,137 @@
+/* gmcfeedmanager - back office configuration screen styling */
+
+.gmc-feed-manager .nav-tabs {
+    margin-bottom: 20px;
+}
+
+.gmc-feed-manager .gmc-monospace {
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+    font-size: 12px;
+}
+
+#gmc-feed-url {
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+}
+
+/* Category mapping table */
+.gmc-category-table td {
+    vertical-align: middle;
+}
+
+.gmc-typeahead-wrapper {
+    position: relative;
+}
+
+.gmc-typeahead-results {
+    display: none;
+    position: absolute;
+    z-index: 1000;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-top: none;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.gmc-typeahead-results.gmc-open {
+    display: block;
+}
+
+.gmc-typeahead-result {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid #f2f2f2;
+}
+
+.gmc-typeahead-result:hover,
+.gmc-typeahead-result.gmc-active {
+    background: #f5f5f5;
+}
+
+.gmc-typeahead-result .gmc-cat-id {
+    color: #999;
+    float: right;
+}
+
+.gmc-mapping-status {
+    margin-left: 6px;
+    font-size: 14px;
+}
+
+.gmc-mapping-status.gmc-ok {
+    color: #4CAF50;
+}
+
+.gmc-mapping-status.gmc-error {
+    color: #D8514F;
+}
+
+/* Diagnostics */
+.gmc-diagnostics-grid {
+    margin-top: 20px;
+}
+
+.gmc-diag-card {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-left: 4px solid #cccccc;
+    border-radius: 3px;
+    padding: 15px;
+    margin-bottom: 15px;
+    min-height: 150px;
+}
+
+.gmc-diag-card[data-severity="danger"] {
+    border-left-color: #D8514F;
+}
+
+.gmc-diag-card[data-severity="warning"] {
+    border-left-color: #EFAC4F;
+}
+
+.gmc-diag-card[data-severity="info"] {
+    border-left-color: #4d90c5;
+}
+
+.gmc-diag-badge {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.gmc-diag-card[data-severity="danger"] .gmc-diag-badge.gmc-nonzero {
+    color: #D8514F;
+}
+
+.gmc-diag-card[data-severity="warning"] .gmc-diag-badge.gmc-nonzero {
+    color: #EFAC4F;
+}
+
+.gmc-diag-card[data-severity="info"] .gmc-diag-badge.gmc-nonzero {
+    color: #4d90c5;
+}
+
+.gmc-diag-badge.gmc-zero {
+    color: #4CAF50;
+}
+
+.gmc-diag-label {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.gmc-diag-hint {
+    color: #777;
+    font-size: 12px;
+    margin: 0;
+}
+
+.gmc-hidden {
+    display: none;
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Static, non-secret defaults for gmcfeedmanager.
+
+  Read once by Gmcfeedmanager::install() to seed Configuration values, and
+  by GoogleCategoryService as the source URL for the Google Product
+  Taxonomy download. Nothing in this file is per-shop or secret; runtime
+  settings (tokens, service account JSON, mappings) live in ps_configuration
+  and the module's own tables, editable from AdminGmcFeedConfigurationController.
+-->
+<config>
+    <defaults>
+        <!-- api_sync_enabled: real-time Content API push on product/quantity hooks -->
+        <api_sync_enabled>0</api_sync_enabled>
+        <!-- id_lang / id_currency used to build the feed when the URL omits them -->
+        <default_id_lang>1</default_id_lang>
+        <default_id_currency>1</default_id_currency>
+        <!-- rows fetched per SQL round-trip while streaming the feed -->
+        <feed_chunk_size>250</feed_chunk_size>
+        <!-- default product condition exposed as g:condition -->
+        <default_condition>new</default_condition>
+        <!-- max lengths enforced by ProductDataTransformer, per Google's spec -->
+        <title_max_length>150</title_max_length>
+        <description_max_length>5000</description_max_length>
+    </defaults>
+
+    <!-- Canonical source for the Google Product Taxonomy flat file (id: name) -->
+    <taxonomy>
+        <source_url>https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt</source_url>
+        <cache_ttl_seconds>604800</cache_ttl_seconds>
+    </taxonomy>
+
+    <!-- Content API endpoint used by GoogleContentApiService -->
+    <content_api>
+        <base_url>https://shoppingcontent.googleapis.com/content/v2.1/</base_url>
+        <token_url>https://oauth2.googleapis.com/token</token_url>
+        <scope>https://www.googleapis.com/auth/content</scope>
+    </content_api>
+</config>
