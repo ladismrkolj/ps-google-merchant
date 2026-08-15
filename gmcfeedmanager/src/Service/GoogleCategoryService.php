@@ -21,6 +21,7 @@ class GoogleCategoryService
 {
     private const DEFAULT_TAXONOMY_URL = 'https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt';
     private const DEFAULT_CACHE_TTL = 604800; // 7 days
+    private const DOWNLOAD_RETRY_BACKOFF = 900; // 15 min between failed download retries
 
     private readonly string $taxonomySourceUrl;
     private readonly int $cacheTtlSeconds;
@@ -45,10 +46,13 @@ class GoogleCategoryService
             return [];
         }
 
-        if (!$this->isCacheFresh()) {
+        if (!$this->isCacheFresh() && $this->shouldAttemptDownload()) {
             $this->downloadTaxonomy();
         }
 
+        // A stale cache still beats no cache: the taxonomy changes a few
+        // times a year, so serving slightly old entries is far better than
+        // an empty typeahead when the download is unavailable.
         $path = $this->getCacheFilePath();
         if (!is_file($path)) {
             return [];
@@ -92,6 +96,10 @@ class GoogleCategoryService
     public function downloadTaxonomy(): bool
     {
         $this->ensureCacheDirectoryExists();
+
+        // Stamp the attempt before doing it, so a hanging or failing
+        // download cannot be retried by the next keystroke.
+        @touch($this->getDownloadAttemptFilePath());
 
         $tmpFile = $this->getCacheDirectory() . 'taxonomy_raw_' . uniqid('', true) . '.txt';
 
@@ -178,15 +186,17 @@ class GoogleCategoryService
         return (time() - (int) filemtime($path)) < $this->cacheTtlSeconds;
     }
 
+    /**
+     * The module's own var/ directory -- deliberately NOT _PS_CACHE_DIR_,
+     * which is environment-scoped (var/cache/<env>/) and wiped every time
+     * the Symfony cache is cleared. The taxonomy is a multi-megabyte
+     * download that changes a few times a year: treating it as clearable
+     * cache means re-fetching it after every cache clear and leaving the
+     * typeahead dead whenever the download is unavailable.
+     */
     private function getCacheDirectory(): string
     {
-        if (defined('_PS_CACHE_DIR_')) {
-            $dir = rtrim(_PS_CACHE_DIR_, '/') . '/gmcfeedmanager/';
-        } else {
-            $dir = dirname(__DIR__, 2) . '/var/cache/';
-        }
-
-        return $dir;
+        return dirname(__DIR__, 2) . '/var/';
     }
 
     private function getCacheFilePath(): string
@@ -194,11 +204,31 @@ class GoogleCategoryService
         return $this->getCacheDirectory() . 'taxonomy.tsv';
     }
 
+    /**
+     * Marker recording when a download was last attempted, so a failing
+     * or unreachable source is retried on a backoff rather than on every
+     * single typeahead keystroke.
+     */
+    private function getDownloadAttemptFilePath(): string
+    {
+        return $this->getCacheDirectory() . 'taxonomy.attempt';
+    }
+
+    private function shouldAttemptDownload(): bool
+    {
+        $marker = $this->getDownloadAttemptFilePath();
+        if (!is_file($marker)) {
+            return true;
+        }
+
+        return (time() - (int) filemtime($marker)) >= self::DOWNLOAD_RETRY_BACKOFF;
+    }
+
     private function ensureCacheDirectoryExists(): void
     {
         $dir = $this->getCacheDirectory();
         if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+            @mkdir($dir, 0775, true);
         }
     }
 

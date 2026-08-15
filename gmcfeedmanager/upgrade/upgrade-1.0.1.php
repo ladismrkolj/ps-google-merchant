@@ -20,13 +20,13 @@ if (!defined('_PS_VERSION_')) {
  */
 function upgrade_module_1_0_1(Module $module): bool
 {
-    $idTab = (int) Tab::getIdFromClassName('AdminGmcFeedConfigurationController');
+    $idTab = (int) Tab::getIdFromClassName('AdminGmcFeedConfiguration');
     if ($idTab > 0) {
         (new Tab($idTab))->delete();
     }
 
     $tab = new Tab();
-    $tab->class_name = 'AdminGmcFeedConfigurationController';
+    $tab->class_name = 'AdminGmcFeedConfiguration';
     $tab->module = $module->name;
     $tab->icon = 'shopping_basket';
     $tab->id_parent = 0;

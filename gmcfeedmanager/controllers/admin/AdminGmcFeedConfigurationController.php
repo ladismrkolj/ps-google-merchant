@@ -82,7 +82,7 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
             Configuration::updateValue(Gmcfeedmanager::CONFIG_SERVICE_ACCOUNT_JSON, $serviceAccountJson);
         }
 
-        Tools::redirectAdmin($this->context->link->getAdminLink('AdminGmcFeedConfigurationController') . '&conf=4');
+        Tools::redirectAdmin($this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER) . '&conf=4');
     }
 
     private function processApparelSettings(): void
@@ -92,14 +92,14 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         Configuration::updateValue(Gmcfeedmanager::CONFIG_FEATURE_GENDER, (int) Tools::getValue('feature_gender'));
         Configuration::updateValue(Gmcfeedmanager::CONFIG_FEATURE_AGE_GROUP, (int) Tools::getValue('feature_age_group'));
 
-        Tools::redirectAdmin($this->context->link->getAdminLink('AdminGmcFeedConfigurationController') . '&conf=4#apparel');
+        Tools::redirectAdmin($this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER) . '&conf=4#apparel');
     }
 
     private function processRegenerateToken(): void
     {
         Configuration::updateValue(Gmcfeedmanager::CONFIG_FEED_TOKEN, bin2hex(random_bytes(20)));
 
-        Tools::redirectAdmin($this->context->link->getAdminLink('AdminGmcFeedConfigurationController') . '&conf=4');
+        Tools::redirectAdmin($this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER) . '&conf=4');
     }
 
     /**
@@ -187,15 +187,14 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
             'gmc_languages' => Language::getLanguages(false),
             'gmc_currencies' => Currency::getCurrencies(false, true),
             'gmc_conditions' => ['new', 'refurbished', 'used'],
-            'gmc_categories' => $this->getCategoryTree($idLang),
-            'gmc_category_mappings' => (new GoogleCategoryService())->getAllMappings($idShop),
+            'gmc_categories' => $this->getCategoryTree($idLang, $idShop),
             'gmc_attribute_groups' => AttributeGroup::getAttributesGroups($idLang),
             'gmc_features' => Feature::getFeatures($idLang),
             'gmc_attr_group_color' => (int) Configuration::get(Gmcfeedmanager::CONFIG_ATTR_GROUP_COLOR),
             'gmc_attr_group_size' => (int) Configuration::get(Gmcfeedmanager::CONFIG_ATTR_GROUP_SIZE),
             'gmc_feature_gender' => (int) Configuration::get(Gmcfeedmanager::CONFIG_FEATURE_GENDER),
             'gmc_feature_age_group' => (int) Configuration::get(Gmcfeedmanager::CONFIG_FEATURE_AGE_GROUP),
-            'gmc_ajax_url' => $this->context->link->getAdminLink('AdminGmcFeedConfigurationController'),
+            'gmc_ajax_url' => $this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER),
             'current_index' => self::$currentIndex,
             'token' => $this->token,
         ]);
@@ -220,9 +219,15 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
     }
 
     /**
-     * @return array<int, array{id_category: int, name: string, level_depth: int}>
+     * Category rows for the mapping tab, each already carrying its Google
+     * taxonomy mapping (empty strings when unmapped). Resolving this here
+     * rather than indexing a lookup array in Smarty keeps the template
+     * from reading array keys that may not exist, which PHP 8 warns about
+     * (and _PS_MODE_DEV_ escalates into a 500).
+     *
+     * @return array<int, array{id_category: int, name: string, level_depth: int, google_category_id: string, google_category_name: string}>
      */
-    private function getCategoryTree(int $idLang): array
+    private function getCategoryTree(int $idLang, int $idShop): array
     {
         $rows = Db::getInstance()->executeS(
             'SELECT c.`id_category`, cl.`name`, c.`level_depth`
@@ -233,12 +238,19 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
              ORDER BY c.`nleft` ASC'
         );
 
+        $mappings = (new GoogleCategoryService())->getAllMappings($idShop);
+
         $categories = [];
         foreach (($rows ?: []) as $row) {
+            $idCategory = (int) $row['id_category'];
+            $mapping = $mappings[$idCategory] ?? null;
+
             $categories[] = [
-                'id_category' => (int) $row['id_category'],
+                'id_category' => $idCategory,
                 'name' => (string) $row['name'],
                 'level_depth' => (int) $row['level_depth'],
+                'google_category_id' => $mapping ? (string) $mapping['id'] : '',
+                'google_category_name' => $mapping ? $mapping['name'] : '',
             ];
         }
 
@@ -296,7 +308,7 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
              INNER JOIN `' . _DB_PREFIX_ . 'stock_available` sa
                 ON sa.`id_product` = p.`id_product` AND sa.`id_product_attribute` = 0
                    AND (sa.`id_shop` = ' . $idShop . ' OR sa.`id_shop` = 0)
-             WHERE ps.`active` = 1 AND sa.`quantity` <= 0 AND ps.`out_of_stock` = 2'
+             WHERE ps.`active` = 1 AND sa.`quantity` <= 0 AND p.`out_of_stock` = 2'
         );
 
         return [

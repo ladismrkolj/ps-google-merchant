@@ -304,6 +304,11 @@ class ProductDataTransformer
         return number_format($amount, 2, '.', '') . ' ' . $isoCode;
     }
 
+    /**
+     * Note: no explicit "LIMIT 1" in this (or any other) getRow()/getValue()
+     * query -- Db::getRow() appends its own, and a second one is a SQL
+     * syntax error.
+     */
     private function buildSalePriceEffectiveDate(int $idProduct, int $idProductAttribute): ?string
     {
         $row = Db::getInstance()->getRow(
@@ -313,8 +318,7 @@ class ProductDataTransformer
                AND `id_product_attribute` IN (0, ' . $idProductAttribute . ')
                AND `from` != "0000-00-00 00:00:00"
                AND `to` != "0000-00-00 00:00:00"
-             ORDER BY `id_product_attribute` DESC
-             LIMIT 1'
+             ORDER BY `id_product_attribute` DESC'
         );
 
         if (!$row || empty($row['from']) || empty($row['to'])) {
@@ -444,8 +448,7 @@ class ProductDataTransformer
              INNER JOIN `' . _DB_PREFIX_ . 'attribute_lang` al
                 ON al.`id_attribute` = a.`id_attribute` AND al.`id_lang` = ' . (int) $idLang . '
              WHERE pac.`id_product_attribute` = ' . (int) $idProductAttribute . '
-               AND a.`id_attribute_group` = ' . (int) $idAttributeGroup . '
-             LIMIT 1'
+               AND a.`id_attribute_group` = ' . (int) $idAttributeGroup
         );
 
         return $value ?: null;
@@ -459,26 +462,56 @@ class ProductDataTransformer
              INNER JOIN `' . _DB_PREFIX_ . 'feature_value_lang` fvl
                 ON fvl.`id_feature_value` = fp.`id_feature_value` AND fvl.`id_lang` = ' . (int) $idLang . '
              WHERE fp.`id_product` = ' . (int) $idProduct . '
-               AND fp.`id_feature` = ' . (int) $idFeature . '
-             LIMIT 1'
+               AND fp.`id_feature` = ' . (int) $idFeature
         );
 
         return $value ?: null;
     }
 
     /**
+     * Resolves the rule that applies to one sellable unit.
+     *
+     * Two rows can be in play: the product-level rule
+     * (id_product_attribute = 0) and a rule targeting this specific
+     * combination. The combination-specific row wins field by field, but
+     * an exclusion at either level excludes -- excluding a product has to
+     * take its variants down with it, otherwise "exclude this product"
+     * silently keeps shipping every one of its combinations.
+     *
      * @return array<string, mixed>|null
      */
     private function getProductRule(int $idProduct, int $idProductAttribute): ?array
     {
-        $row = Db::getInstance()->getRow(
+        $rows = Db::getInstance()->executeS(
             'SELECT *
              FROM `' . _DB_PREFIX_ . 'gmc_product_rule`
              WHERE `id_product` = ' . $idProduct . '
-               AND `id_product_attribute` = ' . $idProductAttribute
+               AND `id_product_attribute` IN (0, ' . $idProductAttribute . ')
+             ORDER BY `id_product_attribute` ASC'
         );
 
-        return $row ?: null;
+        if (!$rows) {
+            return null;
+        }
+
+        $rule = [];
+        $excluded = false;
+
+        // Ascending order means the product-level row (0) is applied first
+        // and the combination-specific row overwrites it.
+        foreach ($rows as $row) {
+            $excluded = $excluded || (bool) $row['is_excluded'];
+
+            foreach ($row as $key => $value) {
+                if ($value !== null && $value !== '') {
+                    $rule[$key] = $value;
+                }
+            }
+        }
+
+        $rule['is_excluded'] = $excluded;
+
+        return $rule;
     }
 
     /**
