@@ -135,6 +135,14 @@ class GmcfeedmanagerFeedModuleFrontController extends ModuleFrontController
             ob_end_clean();
         }
 
+        // This response is parsed by a machine, so a single PHP notice
+        // printed mid-stream makes the whole feed malformed and Google
+        // rejects it. Errors still reach the log, they just never reach
+        // the body. (A shop left in debug mode is exactly how a stray
+        // deprecation notice ends up inside the XML.)
+        @ini_set('display_errors', '0');
+        @ini_set('html_errors', '0');
+
         set_time_limit(0);
         header('Content-Type: application/xml; charset=utf-8');
 

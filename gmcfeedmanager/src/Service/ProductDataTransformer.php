@@ -223,8 +223,12 @@ class ProductDataTransformer
             $idImageCover = $cover['id_image'] ?? null;
         }
 
+        // Pass the bare image id, never the old "idProduct-idImage" form:
+        // PrestaShop 9 deprecates that fallback (and emits E_USER_DEPRECATED
+        // for it in debug mode, which corrupts the XML stream), while
+        // PrestaShop 8 resolves a bare id through the same code path.
         $coverUrl = $idImageCover
-            ? $link->getImageLink($product->link_rewrite, (int) $product->id . '-' . (int) $idImageCover, 'large_default')
+            ? $link->getImageLink($product->link_rewrite, (int) $idImageCover, 'large_default')
             : '';
 
         $additional = [];
@@ -237,7 +241,7 @@ class ProductDataTransformer
 
             $additional[] = $link->getImageLink(
                 $product->link_rewrite,
-                (int) $product->id . '-' . (int) $image['id_image'],
+                (int) $image['id_image'],
                 'large_default'
             );
 
