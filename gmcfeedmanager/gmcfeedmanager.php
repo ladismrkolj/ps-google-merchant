@@ -47,6 +47,9 @@ class Gmcfeedmanager extends Module
      */
     public const ADMIN_CONTROLLER = 'AdminGmcFeedConfiguration';
 
+    /** Give up pushing a product's remaining offers after this many failures in a row. */
+    private const MAX_CONSECUTIVE_SYNC_FAILURES = 3;
+
     /**
      * Hooks the module registers.
      *
@@ -437,15 +440,20 @@ class Gmcfeedmanager extends Module
                 (string) Configuration::get(self::CONFIG_MERCHANT_ID),
                 (string) Configuration::get(self::CONFIG_SERVICE_ACCOUNT_JSON)
             );
-
-            foreach ($offerIds as $offerId) {
-                $api->deleteProduct($offerId);
-            }
         } catch (Throwable $e) {
             PrestaShopLogger::addLog(
                 'gmcfeedmanager: real-time API delete failed - ' . $e->getMessage(),
                 3
             );
+
+            return;
+        }
+
+        // GoogleContentApiService::deleteProduct() already logs and returns
+        // false rather than throwing, so one failed offer cannot stop the
+        // rest from being retired.
+        foreach ($offerIds as $offerId) {
+            $api->deleteProduct($offerId);
         }
     }
 
@@ -503,8 +511,19 @@ class Gmcfeedmanager extends Module
                 (string) Configuration::get(self::CONFIG_MERCHANT_ID),
                 (string) Configuration::get(self::CONFIG_SERVICE_ACCOUNT_JSON)
             );
+        } catch (Throwable $e) {
+            // Bad credentials/config: nothing can be pushed, log once.
+            $this->logSyncFailure($product, $e);
 
-            foreach ($this->resolveCombinationIds($product, $idProductAttribute) as $idAttribute) {
+            return;
+        }
+
+        $consecutiveFailures = 0;
+
+        foreach ($this->resolveCombinationIds($product, $idProductAttribute) as $idAttribute) {
+            // Per offer, so one rejected variant (or a transient API error)
+            // does not abort syncing the product's remaining variants.
+            try {
                 $combination = null;
                 if ($idAttribute > 0) {
                     $combination = new Combination($idAttribute);
@@ -515,17 +534,29 @@ class Gmcfeedmanager extends Module
 
                 $data = $transformer->transform($product, $idLang, $idCurrency, $combination);
                 $api->patchProduct($data);
+                $consecutiveFailures = 0;
+            } catch (Throwable $e) {
+                $this->logSyncFailure($product, $e);
+
+                // Auth/quota problems fail identically for every offer;
+                // give up rather than write one log line per variant.
+                if (++$consecutiveFailures >= self::MAX_CONSECUTIVE_SYNC_FAILURES) {
+                    return;
+                }
             }
-        } catch (Throwable $e) {
-            PrestaShopLogger::addLog(
-                'gmcfeedmanager: real-time API sync failed - ' . $e->getMessage(),
-                3,
-                null,
-                'Product',
-                (int) $product->id,
-                true
-            );
         }
+    }
+
+    private function logSyncFailure(Product $product, Throwable $e): void
+    {
+        PrestaShopLogger::addLog(
+            'gmcfeedmanager: real-time API sync failed - ' . $e->getMessage(),
+            3,
+            null,
+            'Product',
+            (int) $product->id,
+            true
+        );
     }
 
     /**
