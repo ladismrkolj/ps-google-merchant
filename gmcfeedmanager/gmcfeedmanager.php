@@ -47,11 +47,50 @@ class Gmcfeedmanager extends Module
      */
     public const ADMIN_CONTROLLER = 'AdminGmcFeedConfiguration';
 
+    /** Give up pushing a product's remaining offers after this many failures in a row. */
+    private const MAX_CONSECUTIVE_SYNC_FAILURES = 3;
+
+    /**
+     * Hooks the module registers.
+     *
+     * The actionObject*After hooks are not declared anywhere in core: they
+     * are fired dynamically by ObjectModel::add()/update()/delete() as
+     * "actionObject<ClassName><Event>", so registering them is enough.
+     *
+     * Why each one is here:
+     *  - Product Add/Update  : push the offer when a product is created or edited.
+     *  - Product Delete      : retire the offer. Without this, a product deleted
+     *                          in PrestaShop keeps being served by Merchant Center
+     *                          until it expires, which means ads pointing at a
+     *                          dead product page.
+     *  - Combination Delete  : same, per variant. Product::deleteProductAttributes()
+     *                          deletes combinations one by one, so this also covers
+     *                          the variants of a deleted parent product.
+     *  - SpecificPrice Add/Delete : starting or ending a sale never touches the
+     *                          product row, so ProductUpdateAfter does not fire and
+     *                          g:sale_price would otherwise stay stale until the
+     *                          next scheduled feed fetch.
+     *  - Category Delete     : drop that category's taxonomy mapping instead of
+     *                          leaving an orphan row behind.
+     *  - actionUpdateQuantity: stock moves change g:availability.
+     */
+    public const HOOKS = [
+        'actionObjectProductAddAfter',
+        'actionObjectProductUpdateAfter',
+        'actionObjectProductDeleteAfter',
+        'actionObjectCombinationDeleteAfter',
+        'actionObjectSpecificPriceAddAfter',
+        'actionObjectSpecificPriceDeleteAfter',
+        'actionObjectCategoryDeleteAfter',
+        'actionUpdateQuantity',
+        'displayBackOfficeHeader',
+    ];
+
     public function __construct()
     {
         $this->name = 'gmcfeedmanager';
         $this->tab = 'smart_shopping';
-        $this->version = '1.0.2';
+        $this->version = '1.0.3';
         $this->author = 'Vladimir Smrkolj';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -79,13 +118,7 @@ class Gmcfeedmanager extends Module
             return false;
         }
 
-        $hooks = [
-            'actionObjectProductUpdateAfter',
-            'actionUpdateQuantity',
-            'displayBackOfficeHeader',
-        ];
-
-        foreach ($hooks as $hook) {
+        foreach (self::HOOKS as $hook) {
             if (!$this->registerHook($hook)) {
                 return false;
             }
@@ -290,8 +323,98 @@ class Gmcfeedmanager extends Module
      */
     public function hookActionObjectProductUpdateAfter(array $params): void
     {
+        $this->syncProductFromHook($params['object'] ?? null);
+    }
+
+    /**
+     * Real-time sync: a newly created product is not covered by the update
+     * hook, so it would otherwise wait for the next scheduled feed fetch.
+     */
+    public function hookActionObjectProductAddAfter(array $params): void
+    {
+        $this->syncProductFromHook($params['object'] ?? null);
+    }
+
+    /**
+     * Retires every offer belonging to a deleted product. Without this the
+     * offer keeps being served by Merchant Center until it expires, so ads
+     * can point at a product page that no longer exists.
+     */
+    public function hookActionObjectProductDeleteAfter(array $params): void
+    {
         $object = $params['object'] ?? null;
-        if (!$object instanceof Product) {
+        if (!$object instanceof Product || !$object->id) {
+            return;
+        }
+
+        $this->deleteOffers([(string) $object->id]);
+    }
+
+    /**
+     * Retires a single variant's offer. Product::deleteProductAttributes()
+     * deletes combinations one at a time, so this also covers the variants
+     * of a deleted parent product.
+     */
+    public function hookActionObjectCombinationDeleteAfter(array $params): void
+    {
+        $object = $params['object'] ?? null;
+        if (!$object instanceof Combination || !$object->id) {
+            return;
+        }
+
+        $this->deleteOffers([$object->id_product . '_' . $object->id]);
+    }
+
+    /**
+     * Starting or ending a sale writes to specific_price, never to the
+     * product row, so the update hook does not fire and g:sale_price would
+     * stay stale until the next scheduled fetch.
+     */
+    public function hookActionObjectSpecificPriceAddAfter(array $params): void
+    {
+        $this->syncFromSpecificPrice($params['object'] ?? null);
+    }
+
+    public function hookActionObjectSpecificPriceDeleteAfter(array $params): void
+    {
+        $this->syncFromSpecificPrice($params['object'] ?? null);
+    }
+
+    /**
+     * Housekeeping: drop the taxonomy mapping of a deleted category rather
+     * than leaving an orphan row that shadows a future category reusing
+     * that id.
+     */
+    public function hookActionObjectCategoryDeleteAfter(array $params): void
+    {
+        $object = $params['object'] ?? null;
+        if (!$object instanceof Category || !$object->id) {
+            return;
+        }
+
+        Db::getInstance()->delete('gmc_category_mapping', 'id_category = ' . (int) $object->id);
+    }
+
+    private function syncFromSpecificPrice($specificPrice): void
+    {
+        if (!is_object($specificPrice) || empty($specificPrice->id_product)) {
+            return;
+        }
+
+        $product = new Product(
+            (int) $specificPrice->id_product,
+            false,
+            (int) Configuration::get(self::CONFIG_ID_LANG)
+        );
+
+        if (Validate::isLoadedObject($product)) {
+            $this->pushProductToContentApi($product);
+        }
+    }
+
+    private function syncProductFromHook($object): void
+    {
+        if (!$object instanceof Product || !$object->id) {
             return;
         }
 
@@ -301,6 +424,44 @@ class Gmcfeedmanager extends Module
         $product = new Product((int) $object->id, false, (int) Configuration::get(self::CONFIG_ID_LANG));
 
         $this->pushProductToContentApi($product);
+    }
+
+    /**
+     * @param array<int, string> $offerIds
+     */
+    private function deleteOffers(array $offerIds): void
+    {
+        if (!$this->isApiSyncConfigured()) {
+            return;
+        }
+
+        try {
+            $api = new GoogleContentApiService(
+                (string) Configuration::get(self::CONFIG_MERCHANT_ID),
+                (string) Configuration::get(self::CONFIG_SERVICE_ACCOUNT_JSON)
+            );
+        } catch (Throwable $e) {
+            PrestaShopLogger::addLog(
+                'gmcfeedmanager: real-time API delete failed - ' . $e->getMessage(),
+                3
+            );
+
+            return;
+        }
+
+        // GoogleContentApiService::deleteProduct() already logs and returns
+        // false rather than throwing, so one failed offer cannot stop the
+        // rest from being retired.
+        foreach ($offerIds as $offerId) {
+            $api->deleteProduct($offerId);
+        }
+    }
+
+    private function isApiSyncConfigured(): bool
+    {
+        return (bool) Configuration::get(self::CONFIG_API_SYNC_ENABLED)
+            && (string) Configuration::get(self::CONFIG_MERCHANT_ID) !== ''
+            && (string) Configuration::get(self::CONFIG_SERVICE_ACCOUNT_JSON) !== '';
     }
 
     /**
@@ -323,20 +484,21 @@ class Gmcfeedmanager extends Module
         $this->pushProductToContentApi($product, (int) ($params['id_product_attribute'] ?? 0));
     }
 
+    /**
+     * Pushes a product to the Content API.
+     *
+     * With $idProductAttribute = 0 on a product that has combinations,
+     * every combination is pushed: each variant is its own Merchant Center
+     * offer, so syncing only the parent id would leave every variant offer
+     * stale (and create a "parent" offer that the feed itself never emits).
+     */
     private function pushProductToContentApi(?Product $product, int $idProductAttribute = 0): void
     {
         if (!$product instanceof Product || !Validate::isLoadedObject($product)) {
             return;
         }
 
-        if (!(bool) Configuration::get(self::CONFIG_API_SYNC_ENABLED)) {
-            return;
-        }
-
-        $merchantId = (string) Configuration::get(self::CONFIG_MERCHANT_ID);
-        $serviceAccountJson = (string) Configuration::get(self::CONFIG_SERVICE_ACCOUNT_JSON);
-
-        if ($merchantId === '' || $serviceAccountJson === '') {
+        if (!$this->isApiSyncConfigured()) {
             return;
         }
 
@@ -345,27 +507,81 @@ class Gmcfeedmanager extends Module
             $idLang = (int) Configuration::get(self::CONFIG_ID_LANG);
             $idCurrency = (int) Configuration::get(self::CONFIG_ID_CURRENCY);
 
-            $combination = null;
-            if ($idProductAttribute > 0) {
-                $combination = new Combination($idProductAttribute);
-                if (!Validate::isLoadedObject($combination)) {
-                    $combination = null;
+            $api = new GoogleContentApiService(
+                (string) Configuration::get(self::CONFIG_MERCHANT_ID),
+                (string) Configuration::get(self::CONFIG_SERVICE_ACCOUNT_JSON)
+            );
+        } catch (Throwable $e) {
+            // Bad credentials/config: nothing can be pushed, log once.
+            $this->logSyncFailure($product, $e);
+
+            return;
+        }
+
+        $consecutiveFailures = 0;
+
+        foreach ($this->resolveCombinationIds($product, $idProductAttribute) as $idAttribute) {
+            // Per offer, so one rejected variant (or a transient API error)
+            // does not abort syncing the product's remaining variants.
+            try {
+                $combination = null;
+                if ($idAttribute > 0) {
+                    $combination = new Combination($idAttribute);
+                    if (!Validate::isLoadedObject($combination)) {
+                        continue;
+                    }
+                }
+
+                $data = $transformer->transform($product, $idLang, $idCurrency, $combination);
+                $api->patchProduct($data);
+                $consecutiveFailures = 0;
+            } catch (Throwable $e) {
+                $this->logSyncFailure($product, $e);
+
+                // Auth/quota problems fail identically for every offer;
+                // give up rather than write one log line per variant.
+                if (++$consecutiveFailures >= self::MAX_CONSECUTIVE_SYNC_FAILURES) {
+                    return;
                 }
             }
-
-            $data = $transformer->transform($product, $idLang, $idCurrency, $combination);
-
-            $api = new GoogleContentApiService($merchantId, $serviceAccountJson);
-            $api->patchProduct($data);
-        } catch (Throwable $e) {
-            PrestaShopLogger::addLog(
-                'gmcfeedmanager: real-time API sync failed - ' . $e->getMessage(),
-                3,
-                null,
-                'Product',
-                (int) $product->id,
-                true
-            );
         }
+    }
+
+    private function logSyncFailure(Product $product, Throwable $e): void
+    {
+        PrestaShopLogger::addLog(
+            'gmcfeedmanager: real-time API sync failed - ' . $e->getMessage(),
+            3,
+            null,
+            'Product',
+            (int) $product->id,
+            true
+        );
+    }
+
+    /**
+     * The combination ids to push for this product: the explicit one when
+     * the caller named it, otherwise all of the product's combinations, or
+     * [0] for a product without any.
+     *
+     * @return array<int, int>
+     */
+    private function resolveCombinationIds(Product $product, int $idProductAttribute): array
+    {
+        if ($idProductAttribute > 0) {
+            return [$idProductAttribute];
+        }
+
+        $rows = Db::getInstance()->executeS(
+            'SELECT `id_product_attribute`
+             FROM `' . _DB_PREFIX_ . 'product_attribute`
+             WHERE `id_product` = ' . (int) $product->id
+        );
+
+        if (!$rows) {
+            return [0];
+        }
+
+        return array_map(static fn (array $row): int => (int) $row['id_product_attribute'], $rows);
     }
 }
