@@ -161,7 +161,6 @@
                     </thead>
                     <tbody>
                         {foreach from=$gmc_categories item=category}
-                            {assign var=mapping value=$gmc_category_mappings[$category.id_category]}
                             <tr data-id-category="{$category.id_category|intval}">
                                 <td style="padding-left: {($category.level_depth - 1) * 20}px">
                                     {$category.name|escape:'html':'UTF-8'}
@@ -170,9 +169,9 @@
                                     <div class="gmc-typeahead-wrapper">
                                         <input type="text" class="form-control gmc-category-search"
                                                autocomplete="off"
-                                               value="{if $mapping}{$mapping.name|escape:'html':'UTF-8'}{/if}"
+                                               value="{$category.google_category_name|escape:'html':'UTF-8'}"
                                                placeholder="{l s='Search Google taxonomy...' mod='gmcfeedmanager'}">
-                                        <input type="hidden" class="gmc-category-id" value="{if $mapping}{$mapping.id|intval}{/if}">
+                                        <input type="hidden" class="gmc-category-id" value="{$category.google_category_id|escape:'html':'UTF-8'}">
                                         <div class="gmc-typeahead-results"></div>
                                     </div>
                                 </td>

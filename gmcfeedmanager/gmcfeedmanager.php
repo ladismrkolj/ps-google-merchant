@@ -35,13 +35,23 @@ class Gmcfeedmanager extends Module
     public const CONFIG_FEATURE_GENDER = 'GMCFEEDMANAGER_FEATURE_GENDER';
     public const CONFIG_FEATURE_AGE_GROUP = 'GMCFEEDMANAGER_FEATURE_AGE_GROUP';
 
-    public const ADMIN_CONTROLLER = 'AdminGmcFeedConfigurationController';
+    /**
+     * Tab class_name / the "controller" URL parameter.
+     *
+     * NOT the PHP class name: Dispatcher::getControllersInDirectory()
+     * builds its lookup keys by stripping a trailing "Controller.php" off
+     * each filename, so AdminGmcFeedConfigurationController.php registers
+     * as "admingmcfeedconfiguration". Passing the full class name here
+     * never matches and the dispatcher falls through to
+     * AdminNotFoundController ("The controller ... is missing or invalid").
+     */
+    public const ADMIN_CONTROLLER = 'AdminGmcFeedConfiguration';
 
     public function __construct()
     {
         $this->name = 'gmcfeedmanager';
         $this->tab = 'smart_shopping';
-        $this->version = '1.0.1';
+        $this->version = '1.0.2';
         $this->author = 'Vladimir Smrkolj';
         $this->need_instance = 0;
         $this->bootstrap = true;

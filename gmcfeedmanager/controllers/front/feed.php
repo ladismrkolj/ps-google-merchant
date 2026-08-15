@@ -45,7 +45,7 @@ class GmcfeedmanagerFeedModuleFrontController extends ModuleFrontController
 
     public function initContent(): void
     {
-        if (!$this->isTokenValid()) {
+        if (!$this->isFeedTokenValid()) {
             $this->abort(403, 'Forbidden');
         }
 
@@ -57,11 +57,45 @@ class GmcfeedmanagerFeedModuleFrontController extends ModuleFrontController
             $this->abort(400, 'Invalid id_lang or id_currency');
         }
 
+        $this->preparePricingContext($idLang, $idCurrency);
+
         $this->streamFeed($idLang, $idCurrency, $idShop);
         exit;
     }
 
-    private function isTokenValid(): bool
+    /**
+     * Product::getPriceStatic() reads the language, currency, country and
+     * cart straight off the context, and hard-dies ("cart ID must be
+     * provided to this method") when there is neither a cart nor a
+     * logged-in employee -- exactly the situation for an anonymous feed
+     * request.
+     *
+     * Pinning an empty cart carrying the feed's own language/currency and
+     * the shop's default country both satisfies that check and makes the
+     * exported prices deterministic: they no longer depend on whatever
+     * session happens to be fetching the feed.
+     */
+    private function preparePricingContext(int $idLang, int $idCurrency): void
+    {
+        $this->context->language = new Language($idLang);
+        $this->context->currency = new Currency($idCurrency);
+
+        $cart = new Cart();
+        $cart->id_lang = $idLang;
+        $cart->id_currency = $idCurrency;
+        $cart->id_shop = (int) $this->context->shop->id;
+        $cart->id_shop_group = (int) $this->context->shop->id_shop_group;
+
+        $idCountry = (int) Configuration::get('PS_COUNTRY_DEFAULT');
+        $cart->id_address_delivery = 0;
+        $cart->id_address_invoice = 0;
+
+        $this->context->cart = $cart;
+        $this->context->country = new Country($idCountry, $idLang);
+        $this->context->customer = new Customer();
+    }
+
+    private function isFeedTokenValid(): bool
     {
         $expected = (string) Configuration::get(Gmcfeedmanager::CONFIG_FEED_TOKEN);
         $provided = (string) Tools::getValue('token', '');

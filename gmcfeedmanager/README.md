@@ -43,6 +43,16 @@ Use the `ps_gmc_product_rule` table (id_product + id_product_attribute) to
 exclude a product/variant from the feed, or override its title, GTIN, and
 up to five `custom_label_0`..`custom_label_4` values.
 
+## Google taxonomy cache
+
+The Google Product Taxonomy is downloaded once and normalised into
+`modules/gmcfeedmanager/var/taxonomy.tsv` (that directory must be
+writable). It deliberately does **not** live under `_PS_CACHE_DIR_`,
+which is environment-scoped and wiped on every Symfony cache clear. If
+the download is unreachable, an existing (even stale) cache keeps being
+served and retries are backed off, so the typeahead degrades instead of
+hanging on every keystroke.
+
 ## Architecture notes
 
 - `src/Service/ProductDataTransformer.php` turns a `Product` (+ optional
