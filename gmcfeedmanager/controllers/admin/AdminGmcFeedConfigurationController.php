@@ -27,6 +27,17 @@ use GmcFeedManager\Service\GoogleCategoryService;
  */
 class AdminGmcFeedConfigurationController extends ModuleAdminController
 {
+    /**
+     * Translation domain for this screen's strings.
+     *
+     * Strings go through Controller::trans() rather than the older
+     * AdminController::l(): PrestaShop 9 removed l() from both
+     * AdminController and ModuleAdminController (calling it there is a
+     * fatal UndefinedMethodError), while trans() is present in 1.7, 8 and
+     * 9 alike.
+     */
+    private const TRANS_DOMAIN = 'Modules.Gmcfeedmanager.Admin';
+
     public function __construct()
     {
         // A harmless, real core table so AdminController's own bootstrapping
@@ -42,7 +53,7 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         // resets $this->display to its own default ('list').
         $this->display = 'view';
         $this->show_toolbar = false;
-        $this->meta_title = $this->l('Google Merchant Feed Manager');
+        $this->meta_title = $this->trans('Google Merchant Feed Manager', [], self::TRANS_DOMAIN);
     }
 
     public function postProcess()
@@ -75,7 +86,7 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         if ($serviceAccountJson !== '') {
             $decoded = json_decode($serviceAccountJson, true);
             if (!is_array($decoded) || empty($decoded['client_email']) || empty($decoded['private_key'])) {
-                $this->errors[] = $this->l('The Service Account JSON payload is not valid (missing client_email or private_key).');
+                $this->errors[] = $this->trans('The Service Account JSON payload is not valid (missing client_email or private_key).', [], self::TRANS_DOMAIN);
 
                 return;
             }
@@ -125,7 +136,7 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         $idShop = (int) $this->context->shop->id;
 
         if ($idCategory <= 0 || $googleCategoryId <= 0 || $googleCategoryName === '') {
-            $this->ajaxJsonResponse(['success' => false, 'message' => $this->l('Invalid mapping payload.')]);
+            $this->ajaxJsonResponse(['success' => false, 'message' => $this->trans('Invalid mapping payload.', [], self::TRANS_DOMAIN)]);
 
             return;
         }
