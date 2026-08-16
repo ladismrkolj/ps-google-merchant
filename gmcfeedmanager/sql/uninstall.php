@@ -15,6 +15,7 @@ $sql = [];
 
 $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'gmc_category_mapping`;';
 $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'gmc_product_rule`;';
+$sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'gmc_shipping_rate`;';
 
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) === false) {

@@ -34,6 +34,9 @@ class Gmcfeedmanager extends Module
     public const CONFIG_ATTR_GROUP_SIZE = 'GMCFEEDMANAGER_ATTR_GROUP_SIZE';
     public const CONFIG_FEATURE_GENDER = 'GMCFEEDMANAGER_FEATURE_GENDER';
     public const CONFIG_FEATURE_AGE_GROUP = 'GMCFEEDMANAGER_FEATURE_AGE_GROUP';
+    public const CONFIG_CHECKOUT_LINK_ENABLED = 'GMCFEEDMANAGER_CHECKOUT_LINK_ENABLED';
+    public const CONFIG_SHIPPING_ENABLED = 'GMCFEEDMANAGER_SHIPPING_ENABLED';
+    public const CONFIG_RETURN_POLICY_LABEL = 'GMCFEEDMANAGER_RETURN_POLICY_LABEL';
 
     /**
      * Tab class_name / the "controller" URL parameter.
@@ -90,7 +93,7 @@ class Gmcfeedmanager extends Module
     {
         $this->name = 'gmcfeedmanager';
         $this->tab = 'smart_shopping';
-        $this->version = '1.0.3';
+        $this->version = '1.0.4';
         $this->author = 'Vladimir Smrkolj';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -235,6 +238,9 @@ class Gmcfeedmanager extends Module
         Configuration::updateValue(self::CONFIG_ATTR_GROUP_SIZE, 0);
         Configuration::updateValue(self::CONFIG_FEATURE_GENDER, 0);
         Configuration::updateValue(self::CONFIG_FEATURE_AGE_GROUP, 0);
+        Configuration::updateValue(self::CONFIG_CHECKOUT_LINK_ENABLED, 0);
+        Configuration::updateValue(self::CONFIG_SHIPPING_ENABLED, 1);
+        Configuration::updateValue(self::CONFIG_RETURN_POLICY_LABEL, '');
     }
 
     private function uninstallConfiguration(): void
@@ -254,6 +260,9 @@ class Gmcfeedmanager extends Module
             self::CONFIG_ATTR_GROUP_SIZE,
             self::CONFIG_FEATURE_GENDER,
             self::CONFIG_FEATURE_AGE_GROUP,
+            self::CONFIG_CHECKOUT_LINK_ENABLED,
+            self::CONFIG_SHIPPING_ENABLED,
+            self::CONFIG_RETURN_POLICY_LABEL,
         ];
 
         foreach ($keys as $key) {

@@ -11,7 +11,9 @@ if (!defined('_PS_VERSION_')) {
 // if it did).
 require_once __DIR__ . '/../../src/autoload.php';
 
+use GmcFeedManager\Service\CarrierShippingImporter;
 use GmcFeedManager\Service\GoogleCategoryService;
+use GmcFeedManager\Service\ShippingRateService;
 
 /**
  * Back-office configuration screen for gmcfeedmanager: general settings,
@@ -64,6 +66,10 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
             $this->processApparelSettings();
         } elseif (Tools::isSubmit('submitGmcRegenerateToken')) {
             $this->processRegenerateToken();
+        } elseif (Tools::isSubmit('submitGmcShipping')) {
+            $this->processShippingSettings();
+        } elseif (Tools::isSubmit('submitGmcImportCarriers')) {
+            $this->processImportCarriers();
         }
 
         return parent::postProcess();
@@ -78,6 +84,7 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         Configuration::updateValue(Gmcfeedmanager::CONFIG_CONTENT_LANGUAGE, (string) Tools::getValue('content_language'));
         Configuration::updateValue(Gmcfeedmanager::CONFIG_TARGET_COUNTRY, (string) Tools::getValue('target_country'));
         Configuration::updateValue(Gmcfeedmanager::CONFIG_CONDITION, (string) Tools::getValue('default_condition'));
+        Configuration::updateValue(Gmcfeedmanager::CONFIG_CHECKOUT_LINK_ENABLED, (int) Tools::getValue('checkout_link_enabled'));
 
         $chunkSize = (int) Tools::getValue('chunk_size');
         Configuration::updateValue(Gmcfeedmanager::CONFIG_CHUNK_SIZE, $chunkSize > 0 ? $chunkSize : 250);
@@ -104,6 +111,80 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         Configuration::updateValue(Gmcfeedmanager::CONFIG_FEATURE_AGE_GROUP, (int) Tools::getValue('feature_age_group'));
 
         Tools::redirectAdmin($this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER) . '&conf=4#apparel');
+    }
+
+    /**
+     * Saves the shipping tab: the emit toggle, the return policy label and
+     * the whole rate table in one submit (the rows are edited as a block,
+     * so they are replaced as a block).
+     */
+    private function processShippingSettings(): void
+    {
+        Configuration::updateValue(Gmcfeedmanager::CONFIG_SHIPPING_ENABLED, (int) Tools::getValue('shipping_enabled'));
+        Configuration::updateValue(
+            Gmcfeedmanager::CONFIG_RETURN_POLICY_LABEL,
+            trim((string) Tools::getValue('return_policy_label'))
+        );
+
+        $countries = (array) Tools::getValue('rate_country', []);
+        $prices = (array) Tools::getValue('rate_price', []);
+        $currencies = (array) Tools::getValue('rate_currency', []);
+        $services = (array) Tools::getValue('rate_service', []);
+        $regions = (array) Tools::getValue('rate_region', []);
+
+        $rates = [];
+        foreach ($countries as $index => $country) {
+            if (trim((string) $country) === '') {
+                continue;
+            }
+
+            $rates[] = [
+                'iso_country' => (string) $country,
+                'region' => (string) ($regions[$index] ?? ''),
+                'service' => (string) ($services[$index] ?? ''),
+                'price' => (float) str_replace(',', '.', (string) ($prices[$index] ?? '0')),
+                'currency_iso' => (string) ($currencies[$index] ?? ''),
+            ];
+        }
+
+        if (!(new ShippingRateService())->replaceAllRates((int) $this->context->shop->id, $rates)) {
+            $this->errors[] = $this->trans('Could not save the shipping rates.', [], self::TRANS_DOMAIN);
+
+            return;
+        }
+
+        Tools::redirectAdmin($this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER) . '&conf=4#gmc-shipping');
+    }
+
+    /**
+     * Fills the rate table from the shop's own carriers. Read-only against
+     * PrestaShop's shipping configuration -- it only writes the module's
+     * table, and the result stays editable.
+     */
+    private function processImportCarriers(): void
+    {
+        $idShop = (int) $this->context->shop->id;
+        $idCurrency = (int) Configuration::get(Gmcfeedmanager::CONFIG_ID_CURRENCY);
+
+        $rates = (new CarrierShippingImporter())->buildRatesFromCarriers($idShop, $idCurrency);
+
+        if ($rates === []) {
+            $this->errors[] = $this->trans(
+                'No usable rates found. Check that you have active carriers with delivery prices for zones containing active countries.',
+                [],
+                self::TRANS_DOMAIN
+            );
+
+            return;
+        }
+
+        if (!(new ShippingRateService())->replaceAllRates($idShop, $rates)) {
+            $this->errors[] = $this->trans('Could not save the imported shipping rates.', [], self::TRANS_DOMAIN);
+
+            return;
+        }
+
+        Tools::redirectAdmin($this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER) . '&conf=4#gmc-shipping');
     }
 
     private function processRegenerateToken(): void
@@ -205,6 +286,11 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
             'gmc_attr_group_size' => (int) Configuration::get(Gmcfeedmanager::CONFIG_ATTR_GROUP_SIZE),
             'gmc_feature_gender' => (int) Configuration::get(Gmcfeedmanager::CONFIG_FEATURE_GENDER),
             'gmc_feature_age_group' => (int) Configuration::get(Gmcfeedmanager::CONFIG_FEATURE_AGE_GROUP),
+            'gmc_checkout_link_enabled' => (bool) Configuration::get(Gmcfeedmanager::CONFIG_CHECKOUT_LINK_ENABLED),
+            'gmc_checkout_link_preview' => $this->buildCheckoutLinkPreview(),
+            'gmc_shipping_enabled' => (bool) Configuration::get(Gmcfeedmanager::CONFIG_SHIPPING_ENABLED),
+            'gmc_return_policy_label' => Configuration::get(Gmcfeedmanager::CONFIG_RETURN_POLICY_LABEL),
+            'gmc_shipping_rates' => (new ShippingRateService())->getAllRates($idShop),
             'gmc_ajax_url' => $this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER),
             'current_index' => self::$currentIndex,
             'token' => $this->token,
@@ -216,6 +302,25 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
     private function getModuleTemplatePath(string $template): string
     {
         return _PS_MODULE_DIR_ . 'gmcfeedmanager/views/templates/admin/' . $template;
+    }
+
+    /**
+     * The literal template string the feed publishes, shown read-only so
+     * the merchant can see the {id} token is meant to stay unresolved --
+     * Google substitutes it per item.
+     */
+    private function buildCheckoutLinkPreview(): string
+    {
+        $base = $this->context->link->getModuleLink(
+            'gmcfeedmanager',
+            'cart',
+            ['qty' => 1],
+            null,
+            (int) Configuration::get(Gmcfeedmanager::CONFIG_ID_LANG),
+            (int) $this->context->shop->id
+        );
+
+        return $base . (str_contains($base, '?') ? '&' : '?') . 'id={id}';
     }
 
     private function buildFeedUrl(): string

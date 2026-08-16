@@ -66,3 +66,54 @@ hanging on every keystroke.
 - Namespaced classes under `GmcFeedManager\Service\` are loaded by a
   tiny `spl_autoload_register` in `src/autoload.php` — no Composer
   dependency required to install the module.
+
+## Direct to cart (checkout links)
+
+Enable **Direct to cart links** in General Settings and the feed gains a
+`g:checkout_link_template` on every item, pointing at
+`/module/gmcfeedmanager/cart?qty=1&id={id}`.
+
+The `{id}` token is meant to stay literal — Google substitutes it with each
+item's own `g:id` before showing the link. The endpoint understands that
+same id format (`102` or `102_45`), adds the product (and the right
+combination) to a real PrestaShop cart, and redirects to the cart page.
+Unknown ids fall back to the homepage, and an unusable combination falls
+back to the product page rather than dead-ending.
+
+In Merchant Center, choose the option to supply the URL **in your data
+source** and leave the account-level URL field blank.
+
+## Shipping rates
+
+The **Shipping & Returns** tab holds one flat rate per destination country.
+Each row carries its own currency, which is what lets the feed quote a
+different currency per country.
+
+**Import from my carriers** fills the table from the shop's own carriers:
+it reads active carriers, their zones, and the *entry-level* delivery price
+for each (deliberately not the cheapest tier — carriers often have a 0.00
+"free over X" range, and taking the minimum would advertise free shipping
+to everyone), adds the handling fee where the carrier applies one, keeps
+the cheapest carrier per country and converts into the feed currency.
+
+The import is read-only with respect to PrestaShop — it only writes the
+module's own table, never the shop's shipping configuration — and every
+imported row stays editable afterwards. Review the result: a free carrier
+such as "Click and collect" will legitimately import as 0.00, which is not
+usually what you want to advertise as shipping.
+
+Turn the whole thing off if you would rather configure shipping in
+Merchant Center directly. Rates sent in the feed take precedence over the
+account-level settings.
+
+## Return policy
+
+Set **Return policy label** to the label of a policy that already exists in
+Merchant Center. Google does not accept policy text in the feed, only a
+label pointing at a configured policy. Leave it blank to use the account
+default.
+
+Note: `checkout_link_template` and `return_policy_label` ship in the XML
+feed only. The Content API v2.1 products resource has no documented
+equivalent, and sending unknown keys risks the whole upsert being rejected.
+`shipping` and `brand` are sent through both paths.
