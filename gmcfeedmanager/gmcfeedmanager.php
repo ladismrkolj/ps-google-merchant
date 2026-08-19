@@ -37,6 +37,7 @@ class Gmcfeedmanager extends Module
     public const CONFIG_CHECKOUT_LINK_ENABLED = 'GMCFEEDMANAGER_CHECKOUT_LINK_ENABLED';
     public const CONFIG_SHIPPING_ENABLED = 'GMCFEEDMANAGER_SHIPPING_ENABLED';
     public const CONFIG_RETURN_POLICY_LABEL = 'GMCFEEDMANAGER_RETURN_POLICY_LABEL';
+    public const CONFIG_IMPORT_CARRIERS = 'GMCFEEDMANAGER_IMPORT_CARRIERS';
 
     /**
      * Tab class_name / the "controller" URL parameter.
@@ -93,7 +94,7 @@ class Gmcfeedmanager extends Module
     {
         $this->name = 'gmcfeedmanager';
         $this->tab = 'smart_shopping';
-        $this->version = '1.0.4';
+        $this->version = '1.0.5';
         $this->author = 'Vladimir Smrkolj';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -241,6 +242,7 @@ class Gmcfeedmanager extends Module
         Configuration::updateValue(self::CONFIG_CHECKOUT_LINK_ENABLED, 0);
         Configuration::updateValue(self::CONFIG_SHIPPING_ENABLED, 1);
         Configuration::updateValue(self::CONFIG_RETURN_POLICY_LABEL, '');
+        Configuration::updateValue(self::CONFIG_IMPORT_CARRIERS, '');
     }
 
     private function uninstallConfiguration(): void
@@ -263,6 +265,7 @@ class Gmcfeedmanager extends Module
             self::CONFIG_CHECKOUT_LINK_ENABLED,
             self::CONFIG_SHIPPING_ENABLED,
             self::CONFIG_RETURN_POLICY_LABEL,
+            self::CONFIG_IMPORT_CARRIERS,
         ];
 
         foreach ($keys as $key) {

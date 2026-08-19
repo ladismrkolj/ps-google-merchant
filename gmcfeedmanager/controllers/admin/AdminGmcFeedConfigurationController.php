@@ -166,11 +166,28 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
         $idShop = (int) $this->context->shop->id;
         $idCurrency = (int) Configuration::get(Gmcfeedmanager::CONFIG_ID_CURRENCY);
 
-        $rates = (new CarrierShippingImporter())->buildRatesFromCarriers($idShop, $idCurrency);
+        $idCarriers = array_map('intval', (array) Tools::getValue('import_carriers', []));
+        $idCarriers = array_values(array_filter($idCarriers, static fn (int $id): bool => $id > 0));
+
+        if ($idCarriers === []) {
+            $this->errors[] = $this->trans(
+                'Select at least one carrier to import from.',
+                [],
+                self::TRANS_DOMAIN
+            );
+
+            return;
+        }
+
+        // Remember the choice: surcharge carriers (overweight, express)
+        // must stay excluded on every later re-import too, not just this one.
+        Configuration::updateValue(Gmcfeedmanager::CONFIG_IMPORT_CARRIERS, implode(',', $idCarriers));
+
+        $rates = (new CarrierShippingImporter())->buildRatesFromCarriers($idShop, $idCurrency, $idCarriers);
 
         if ($rates === []) {
             $this->errors[] = $this->trans(
-                'No usable rates found. Check that you have active carriers with delivery prices for zones containing active countries.',
+                'No usable rates found for the selected carriers. Check that they have delivery prices for zones containing active countries.',
                 [],
                 self::TRANS_DOMAIN
             );
@@ -291,6 +308,8 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
             'gmc_shipping_enabled' => (bool) Configuration::get(Gmcfeedmanager::CONFIG_SHIPPING_ENABLED),
             'gmc_return_policy_label' => Configuration::get(Gmcfeedmanager::CONFIG_RETURN_POLICY_LABEL),
             'gmc_shipping_rates' => (new ShippingRateService())->getAllRates($idShop),
+            'gmc_carriers' => (new CarrierShippingImporter())->getAvailableCarriers($idShop),
+            'gmc_selected_carriers' => $this->getSelectedCarrierIds(),
             'gmc_ajax_url' => $this->context->link->getAdminLink(Gmcfeedmanager::ADMIN_CONTROLLER),
             'current_index' => self::$currentIndex,
             'token' => $this->token,
@@ -302,6 +321,27 @@ class AdminGmcFeedConfigurationController extends ModuleAdminController
     private function getModuleTemplatePath(string $template): string
     {
         return _PS_MODULE_DIR_ . 'gmcfeedmanager/views/templates/admin/' . $template;
+    }
+
+    /**
+     * Carrier ids ticked for import. No stored choice yet means every
+     * carrier is ticked, so a first-time import behaves as before; once
+     * the merchant saves a narrower selection it is respected.
+     *
+     * @return array<int, int>
+     */
+    private function getSelectedCarrierIds(): array
+    {
+        $stored = (string) Configuration::get(Gmcfeedmanager::CONFIG_IMPORT_CARRIERS);
+
+        if (trim($stored) === '') {
+            return array_map(
+                static fn (array $carrier): int => $carrier['id_carrier'],
+                (new CarrierShippingImporter())->getAvailableCarriers((int) $this->context->shop->id)
+            );
+        }
+
+        return array_values(array_filter(array_map('intval', explode(',', $stored))));
     }
 
     /**

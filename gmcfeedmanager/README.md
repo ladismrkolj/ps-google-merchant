@@ -89,18 +89,25 @@ The **Shipping & Returns** tab holds one flat rate per destination country.
 Each row carries its own currency, which is what lets the feed quote a
 different currency per country.
 
-**Import from my carriers** fills the table from the shop's own carriers:
-it reads active carriers, their zones, and the *entry-level* delivery price
-for each (deliberately not the cheapest tier — carriers often have a 0.00
-"free over X" range, and taking the minimum would advertise free shipping
-to everyone), adds the handling fee where the carrier applies one, keeps
-the cheapest carrier per country and converts into the feed currency.
+**Import from selected carriers** fills the table from the shop's own
+carriers. Tick only the carriers that should set the advertised rate —
+overweight, express and pickup carriers otherwise compete for "cheapest
+per country" and can quote a price a normal order never pays. The
+selection is remembered, so later re-imports keep excluding them.
+
+The import reads the ticked carriers, their zones, and the *entry-level*
+delivery price for each (deliberately not the cheapest tier — carriers
+often have a 0.00 "free over X" range, and taking the minimum would
+advertise free shipping to everyone), adds the handling fee where the
+carrier applies one, keeps the cheapest remaining carrier per country and
+converts into the feed currency.
 
 The import is read-only with respect to PrestaShop — it only writes the
 module's own table, never the shop's shipping configuration — and every
 imported row stays editable afterwards. Review the result: a free carrier
 such as "Click and collect" will legitimately import as 0.00, which is not
-usually what you want to advertise as shipping.
+usually what you want to advertise as shipping — untick it rather than
+correcting the row every time.
 
 Turn the whole thing off if you would rather configure shipping in
 Merchant Center directly. Rates sent in the feed take precedence over the
