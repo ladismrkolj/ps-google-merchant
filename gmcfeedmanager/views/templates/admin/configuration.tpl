@@ -348,10 +348,36 @@
                         <i class="icon-plus"></i> {l s='Add a country' mod='gmcfeedmanager'}
                     </button>
 
+                    <hr>
+
+                    <div class="form-group">
+                        <label class="control-label col-lg-3">{l s='Import from these carriers' mod='gmcfeedmanager'}</label>
+                        <div class="col-lg-8">
+                            <p class="help-block" style="margin-top:0">
+                                {l s='Untick carriers that should not set the advertised rate — overweight, express or pickup carriers would otherwise compete for "cheapest per country" and can quote a price a normal order never pays.' mod='gmcfeedmanager'}
+                            </p>
+                            <div class="gmc-carrier-list">
+                                {foreach from=$gmc_carriers item=carrier}
+                                    <label class="gmc-carrier-option">
+                                        <input type="checkbox" name="import_carriers[]" value="{$carrier.id_carrier|intval}"
+                                               {if in_array($carrier.id_carrier, $gmc_selected_carriers)} checked="checked"{/if}>
+                                        {$carrier.name|escape:'html':'UTF-8'}
+                                        <span class="gmc-carrier-meta">
+                                            {if $carrier.is_free}<span class="badge">{l s='free' mod='gmcfeedmanager'}</span>{/if}
+                                            {$carrier.countries|intval} {l s='countries' mod='gmcfeedmanager'}
+                                        </span>
+                                    </label>
+                                {foreachelse}
+                                    <p class="text-muted">{l s='No active carriers found.' mod='gmcfeedmanager'}</p>
+                                {/foreach}
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="panel-footer">
                         <button type="submit" name="submitGmcImportCarriers" class="btn btn-default"
-                                onclick="return confirm('{l s='This replaces the rates below with ones derived from your PrestaShop carriers. Continue?' mod='gmcfeedmanager' js=1}');">
-                            <i class="icon-download"></i> {l s='Import from my carriers' mod='gmcfeedmanager'}
+                                onclick="return confirm('{l s='This replaces the rates below with ones derived from the selected carriers. Continue?' mod='gmcfeedmanager' js=1}');">
+                            <i class="icon-download"></i> {l s='Import from selected carriers' mod='gmcfeedmanager'}
                         </button>
                         <button type="submit" name="submitGmcShipping" class="btn btn-default pull-right">
                             <i class="process-icon-save"></i> {l s='Save' mod='gmcfeedmanager'}
@@ -360,7 +386,7 @@
                 </form>
 
                 <p class="help-block">
-                    {l s='Import reads your active carriers, their zones and the entry-level delivery price for each (plus the handling fee when the carrier applies one), keeps the cheapest carrier per country, and converts into your feed currency. It never modifies your PrestaShop shipping settings, and every imported row stays editable above.' mod='gmcfeedmanager'}
+                    {l s='Import reads the carriers you ticked above, their zones and the entry-level delivery price for each (plus the handling fee when the carrier applies one), keeps the cheapest carrier per country, and converts into your feed currency. It never modifies your PrestaShop shipping settings, and every imported row stays editable above.' mod='gmcfeedmanager'}
                 </p>
             </div>
 

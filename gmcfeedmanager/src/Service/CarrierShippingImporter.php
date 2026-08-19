@@ -30,12 +30,53 @@ use Db;
 class CarrierShippingImporter
 {
     /**
+     * Lists the carriers the import can draw from, for the selection UI.
+     *
+     * @return array<int, array{id_carrier: int, name: string, is_free: bool, countries: int}>
+     */
+    public function getAvailableCarriers(int $idShop): array
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT c.`id_carrier`, c.`name`, c.`is_free`,
+                    COUNT(DISTINCT co.`id_country`) AS countries
+             FROM `' . _DB_PREFIX_ . 'carrier` c
+             LEFT JOIN `' . _DB_PREFIX_ . 'carrier_zone` cz
+                ON cz.`id_carrier` = c.`id_carrier`
+             LEFT JOIN `' . _DB_PREFIX_ . 'zone` z
+                ON z.`id_zone` = cz.`id_zone` AND z.`active` = 1
+             LEFT JOIN `' . _DB_PREFIX_ . 'country` co
+                ON co.`id_zone` = cz.`id_zone` AND co.`active` = 1
+             WHERE c.`active` = 1 AND c.`deleted` = 0
+             GROUP BY c.`id_carrier`, c.`name`, c.`is_free`
+             ORDER BY c.`position` ASC, c.`name` ASC'
+        );
+
+        $carriers = [];
+        foreach (($rows ?: []) as $row) {
+            $carriers[] = [
+                'id_carrier' => (int) $row['id_carrier'],
+                'name' => (string) $row['name'],
+                'is_free' => (bool) $row['is_free'],
+                'countries' => (int) $row['countries'],
+            ];
+        }
+
+        return $carriers;
+    }
+
+    /**
      * Builds the rate rows without persisting them, so the caller can show
      * a preview or hand them to ShippingRateService::replaceAllRates().
      *
+     * @param array<int, int> $idCarriers Restrict to these carriers. Empty
+     *        means every active carrier -- which is rarely what a merchant
+     *        wants once they run surcharge carriers (overweight, express,
+     *        pickup): those would compete for "cheapest per country" and
+     *        can quote a price no ordinary order actually pays.
+     *
      * @return array<int, array{iso_country: string, region: string, service: string, price: float, currency_iso: string}>
      */
-    public function buildRatesFromCarriers(int $idShop, int $idCurrency): array
+    public function buildRatesFromCarriers(int $idShop, int $idCurrency, array $idCarriers = []): array
     {
         $currency = new Currency($idCurrency);
         $currencyIso = $currency->iso_code ?: (Currency::getIsoCodeById((int) Configuration::get('PS_CURRENCY_DEFAULT')) ?: 'EUR');
@@ -55,7 +96,8 @@ class CarrierShippingImporter
                 ON co.`id_zone` = cz.`id_zone` AND co.`active` = 1
              INNER JOIN `' . _DB_PREFIX_ . 'zone` z
                 ON z.`id_zone` = cz.`id_zone` AND z.`active` = 1
-             WHERE c.`active` = 1 AND c.`deleted` = 0
+             WHERE c.`active` = 1 AND c.`deleted` = 0'
+            . $this->buildCarrierFilter($idCarriers) . '
              ORDER BY co.`iso_code` ASC'
         );
 
@@ -112,6 +154,20 @@ class CarrierShippingImporter
         }
 
         return $rates;
+    }
+
+    /**
+     * @param array<int, int> $idCarriers
+     */
+    private function buildCarrierFilter(array $idCarriers): string
+    {
+        $ids = array_filter(array_map('intval', $idCarriers), static fn (int $id): bool => $id > 0);
+
+        if ($ids === []) {
+            return '';
+        }
+
+        return ' AND c.`id_carrier` IN (' . implode(',', array_unique($ids)) . ')';
     }
 
     /**
