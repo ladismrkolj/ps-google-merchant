@@ -192,6 +192,36 @@ class GoogleContentApiService
             }
         }
 
+        if (!empty($data['shipping'])) {
+            $payload['shipping'] = array_map(
+                static function (array $block): array {
+                    [$value, $currency] = array_pad(explode(' ', trim((string) ($block['price'] ?? '')), 2), 2, '');
+
+                    $entry = [
+                        'country' => (string) ($block['country'] ?? ''),
+                        'price' => ['value' => $value, 'currency' => $currency],
+                    ];
+
+                    if (!empty($block['region'])) {
+                        $entry['region'] = (string) $block['region'];
+                    }
+
+                    if (!empty($block['service'])) {
+                        $entry['service'] = (string) $block['service'];
+                    }
+
+                    return $entry;
+                },
+                (array) $data['shipping']
+            );
+        }
+
+        // Deliberately not mapped here: checkout_link_template and
+        // return_policy_label. Both are feed attributes; the v2.1 products
+        // resource has no documented equivalent, and sending unknown keys
+        // risks the whole upsert being rejected. They ship in the XML feed,
+        // which is the supported route for them.
+
         return $payload;
     }
 

@@ -13,6 +13,7 @@
             <li class="active"><a href="#gmc-general" data-toggle="tab">{l s='General Settings' mod='gmcfeedmanager'}</a></li>
             <li><a href="#gmc-categories" data-toggle="tab">{l s='Category Taxonomy Mapping' mod='gmcfeedmanager'}</a></li>
             <li><a href="#gmc-apparel" data-toggle="tab">{l s='Apparel & Attribute Mapping' mod='gmcfeedmanager'}</a></li>
+            <li><a href="#gmc-shipping" data-toggle="tab">{l s='Shipping & Returns' mod='gmcfeedmanager'}</a></li>
             <li><a href="#gmc-diagnostics" data-toggle="tab" id="gmc-diagnostics-tab-link">{l s='Pre-flight Diagnostics' mod='gmcfeedmanager'}</a></li>
         </ul>
 
@@ -106,6 +107,28 @@
                                 <a class="slide-button btn"></a>
                             </span>
                             <p class="help-block">{l s='When enabled, product/quantity changes are pushed to the Content API immediately in addition to the scheduled feed.' mod='gmcfeedmanager'}</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="control-label col-lg-3">{l s='Direct to cart links' mod='gmcfeedmanager'}</label>
+                        <div class="col-lg-8">
+                            <span class="switch prestashop-switch fixed-width-lg">
+                                <input type="radio" name="checkout_link_enabled" id="checkout_link_enabled_on" value="1"{if $gmc_checkout_link_enabled} checked="checked"{/if}>
+                                <label for="checkout_link_enabled_on">{l s='Enabled' mod='gmcfeedmanager'}</label>
+                                <input type="radio" name="checkout_link_enabled" id="checkout_link_enabled_off" value="0"{if !$gmc_checkout_link_enabled} checked="checked"{/if}>
+                                <label for="checkout_link_enabled_off">{l s='Disabled' mod='gmcfeedmanager'}</label>
+                                <a class="slide-button btn"></a>
+                            </span>
+                            <p class="help-block">
+                                {l s='Adds [checkout_link_template] to every item, so shoppers land on your cart with the product already added.' mod='gmcfeedmanager'}
+                                <br>
+                                {l s='In Merchant Center, choose the option to provide the URL in your data source and leave the account-level URL field blank.' mod='gmcfeedmanager'}
+                            </p>
+                            <input type="text" class="form-control gmc-monospace" readonly="readonly" value="{$gmc_checkout_link_preview|escape:'html':'UTF-8'}">
+                            <p class="help-block">
+                                {l s='The {id} token stays literal on purpose: Google replaces it with each item\'s own id.' mod='gmcfeedmanager'}
+                            </p>
                         </div>
                     </div>
 
@@ -256,6 +279,89 @@
                         </button>
                     </div>
                 </form>
+            </div>
+
+            {* ============================= SHIPPING ============================= *}
+            <div class="tab-pane" id="gmc-shipping">
+                <form id="gmc-shipping-form" action="{$current_index}&token={$token}" method="post" class="form-horizontal">
+
+                    <div class="form-group">
+                        <label class="control-label col-lg-3">{l s='Send shipping in the feed' mod='gmcfeedmanager'}</label>
+                        <div class="col-lg-8">
+                            <span class="switch prestashop-switch fixed-width-lg">
+                                <input type="radio" name="shipping_enabled" id="shipping_enabled_on" value="1"{if $gmc_shipping_enabled} checked="checked"{/if}>
+                                <label for="shipping_enabled_on">{l s='Enabled' mod='gmcfeedmanager'}</label>
+                                <input type="radio" name="shipping_enabled" id="shipping_enabled_off" value="0"{if !$gmc_shipping_enabled} checked="checked"{/if}>
+                                <label for="shipping_enabled_off">{l s='Disabled' mod='gmcfeedmanager'}</label>
+                                <a class="slide-button btn"></a>
+                            </span>
+                            <p class="help-block">
+                                {l s='Turn this off if you would rather configure shipping directly in Merchant Center. Rates sent in the feed take precedence over your Merchant Center account settings.' mod='gmcfeedmanager'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="control-label col-lg-3">{l s='Return policy label' mod='gmcfeedmanager'}</label>
+                        <div class="col-lg-4">
+                            <input type="text" name="return_policy_label" class="form-control" value="{$gmc_return_policy_label|escape:'html':'UTF-8'}" placeholder="e.g. 30-day-returns">
+                            <p class="help-block">
+                                {l s='Optional. Must match the label of a return policy you already created in Merchant Center (Google does not accept policy text in the feed). Leave blank to use your account default.' mod='gmcfeedmanager'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="alert alert-info">
+                        {l s='One flat rate per destination country, applied to every product. Each row carries its own currency, so you can quote a different currency per country.' mod='gmcfeedmanager'}
+                    </div>
+
+                    <table class="table" id="gmc-shipping-table">
+                        <thead>
+                            <tr>
+                                <th style="width:120px">{l s='Country (ISO)' mod='gmcfeedmanager'}</th>
+                                <th style="width:120px">{l s='Price' mod='gmcfeedmanager'}</th>
+                                <th style="width:120px">{l s='Currency' mod='gmcfeedmanager'}</th>
+                                <th>{l s='Service (optional)' mod='gmcfeedmanager'}</th>
+                                <th style="width:140px">{l s='Region (optional)' mod='gmcfeedmanager'}</th>
+                                <th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {foreach from=$gmc_shipping_rates item=rate}
+                                <tr>
+                                    <td><input type="text" name="rate_country[]" maxlength="2" class="form-control gmc-uppercase" value="{$rate.iso_country|escape:'html':'UTF-8'}"></td>
+                                    <td><input type="text" name="rate_price[]" class="form-control" value="{$rate.price|string_format:"%.2f"}"></td>
+                                    <td><input type="text" name="rate_currency[]" maxlength="3" class="form-control gmc-uppercase" value="{$rate.currency_iso|escape:'html':'UTF-8'}"></td>
+                                    <td><input type="text" name="rate_service[]" class="form-control" value="{$rate.service|escape:'html':'UTF-8'}"></td>
+                                    <td><input type="text" name="rate_region[]" class="form-control" value="{$rate.region|escape:'html':'UTF-8'}"></td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-default btn-sm gmc-remove-rate"><i class="icon-trash"></i></button>
+                                    </td>
+                                </tr>
+                            {/foreach}
+                        </tbody>
+                    </table>
+
+                    <button type="button" class="btn btn-default" id="gmc-add-rate">
+                        <i class="icon-plus"></i> {l s='Add a country' mod='gmcfeedmanager'}
+                    </button>
+
+                    <div class="panel-footer">
+                        <button type="submit" name="submitGmcImportCarriers" class="btn btn-default"
+                                onclick="return confirm('{l s='This replaces the rates below with ones derived from your PrestaShop carriers. Continue?' mod='gmcfeedmanager' js=1}');">
+                            <i class="icon-download"></i> {l s='Import from my carriers' mod='gmcfeedmanager'}
+                        </button>
+                        <button type="submit" name="submitGmcShipping" class="btn btn-default pull-right">
+                            <i class="process-icon-save"></i> {l s='Save' mod='gmcfeedmanager'}
+                        </button>
+                    </div>
+                </form>
+
+                <p class="help-block">
+                    {l s='Import reads your active carriers, their zones and the entry-level delivery price for each (plus the handling fee when the carrier applies one), keeps the cheapest carrier per country, and converts into your feed currency. It never modifies your PrestaShop shipping settings, and every imported row stays editable above.' mod='gmcfeedmanager'}
+                </p>
             </div>
 
             {* ============================= DIAGNOSTICS ============================= *}

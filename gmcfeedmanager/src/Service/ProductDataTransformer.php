@@ -35,6 +35,7 @@ class ProductDataTransformer
 
     public function __construct(
         private readonly GoogleCategoryService $categoryService = new GoogleCategoryService(),
+        private readonly ShippingRateService $shippingRateService = new ShippingRateService(),
         private readonly int $titleMaxLength = self::DEFAULT_TITLE_MAX_LENGTH,
         private readonly int $descriptionMaxLength = self::DEFAULT_DESCRIPTION_MAX_LENGTH
     ) {
@@ -111,6 +112,24 @@ class ProductDataTransformer
         $data = array_merge($data, $apparel);
 
         $data = array_merge($data, $this->buildCustomLabels($rule));
+
+        $checkoutLinkTemplate = $this->buildCheckoutLinkTemplate($idLang, $idShop);
+        if ($checkoutLinkTemplate !== null) {
+            $data['checkout_link_template'] = $checkoutLinkTemplate;
+        }
+
+        $shipping = $this->buildShippingBlocks($idShop);
+        if ($shipping !== []) {
+            $data['shipping'] = $shipping;
+        }
+
+        // Points at a return policy configured in Merchant Center (Google
+        // does not accept policy text in the feed, only the label of a
+        // policy that already exists in the account).
+        $returnPolicyLabel = trim((string) Configuration::get('GMCFEEDMANAGER_RETURN_POLICY_LABEL'));
+        if ($returnPolicyLabel !== '') {
+            $data['return_policy_label'] = $returnPolicyLabel;
+        }
 
         return $data;
     }
@@ -200,6 +219,64 @@ class ProductDataTransformer
             false,
             true
         );
+    }
+
+    /**
+     * Google's g:checkout_link_template is one literal string applied to
+     * every item: it must contain an unresolved "{id}" token, which Google
+     * substitutes with that item's own g:id when showing the link to a
+     * shopper. The value is deliberately the same for every item in the
+     * feed -- we are not filling {id} in ourselves, Google is.
+     *
+     * Built by hand rather than via Link::getModuleLink(['id' => '{id}']):
+     * that would run the value through http_build_query() and percent-
+     * encode the braces to %7Bid%7D, which is not what Google's own
+     * documented examples show and not worth risking on an unconfirmed
+     * decoding behaviour.
+     */
+    private function buildCheckoutLinkTemplate(int $idLang, int $idShop): ?string
+    {
+        if (!(bool) Configuration::get('GMCFEEDMANAGER_CHECKOUT_LINK_ENABLED')) {
+            return null;
+        }
+
+        $base = Context::getContext()->link->getModuleLink(
+            'gmcfeedmanager',
+            'cart',
+            ['qty' => 1],
+            null,
+            $idLang,
+            $idShop
+        );
+
+        return $base . (str_contains($base, '?') ? '&' : '?') . 'id={id}';
+    }
+
+    /**
+     * One flat rate per configured destination country, applied identically
+     * to every item -- see ShippingRateService for why this does not try to
+     * derive a per-product number from PrestaShop's carrier/zone system.
+     *
+     * @return array<int, array{country: string, region: string, service: string, price: string}>
+     */
+    private function buildShippingBlocks(int $idShop): array
+    {
+        if (!(bool) Configuration::get('GMCFEEDMANAGER_SHIPPING_ENABLED')) {
+            return [];
+        }
+
+        $blocks = [];
+
+        foreach ($this->shippingRateService->getAllRates($idShop) as $rate) {
+            $blocks[] = [
+                'country' => $rate['iso_country'],
+                'region' => $rate['region'],
+                'service' => $rate['service'],
+                'price' => $this->formatPrice($rate['price'], $rate['currency_iso']),
+            ];
+        }
+
+        return $blocks;
     }
 
     /**

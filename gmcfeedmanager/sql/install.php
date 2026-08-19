@@ -55,6 +55,27 @@ CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'gmc_product_rule` (
 ) ENGINE=' . $engine . ' DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ';
 
+/*
+ * Flat per-destination-country shipping rates applied to every feed item
+ * (g:shipping) and every Content API offer (shipping[]). One row per
+ * country per shop; region/service are optional descriptive sub-attributes,
+ * not part of the key, since almost every merchant only needs one rate per
+ * country.
+ */
+$sql[] = '
+CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'gmc_shipping_rate` (
+    `id_shipping_rate` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `id_shop` INT UNSIGNED NOT NULL DEFAULT 1,
+    `iso_country` VARCHAR(2) NOT NULL,
+    `region` VARCHAR(100) DEFAULT NULL,
+    `service` VARCHAR(100) DEFAULT NULL,
+    `price` DECIMAL(10,2) UNSIGNED NOT NULL,
+    `currency_iso` VARCHAR(3) NOT NULL,
+    PRIMARY KEY (`id_shipping_rate`),
+    UNIQUE KEY `idx_shop_country` (`id_shop`, `iso_country`)
+) ENGINE=' . $engine . ' DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+';
+
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) === false) {
         return false;

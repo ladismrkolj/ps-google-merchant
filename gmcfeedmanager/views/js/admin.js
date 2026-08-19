@@ -178,6 +178,46 @@
         });
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Shipping rate rows                                                 */
+    /* ------------------------------------------------------------------ */
+
+    function initShippingRates() {
+        $('#gmc-add-rate').on('click', function () {
+            var $tbody = $('#gmc-shipping-table tbody');
+            // Reuse the last row's currency: adding several countries that
+            // bill in the same currency is the common case.
+            var lastCurrency = $tbody.find('input[name="rate_currency[]"]').last().val() || '';
+
+            var $row = $(
+                '<tr>' +
+                '<td><input type="text" name="rate_country[]" maxlength="2" class="form-control gmc-uppercase"></td>' +
+                '<td><input type="text" name="rate_price[]" class="form-control" value="0.00"></td>' +
+                '<td><input type="text" name="rate_currency[]" maxlength="3" class="form-control gmc-uppercase"></td>' +
+                '<td><input type="text" name="rate_service[]" class="form-control"></td>' +
+                '<td><input type="text" name="rate_region[]" class="form-control"></td>' +
+                '<td class="text-center"><button type="button" class="btn btn-default btn-sm gmc-remove-rate"><i class="icon-trash"></i></button></td>' +
+                '</tr>'
+            );
+
+            $row.find('input[name="rate_currency[]"]').val(lastCurrency);
+            $tbody.append($row);
+            $row.find('input[name="rate_country[]"]').focus();
+        });
+
+        $(document).on('click', '.gmc-remove-rate', function () {
+            $(this).closest('tr').remove();
+        });
+
+        // ISO codes are uppercase; save silently normalises them anyway,
+        // this just makes the field agree with what will be stored.
+        $(document).on('input', '.gmc-uppercase', function () {
+            var pos = this.selectionStart;
+            this.value = this.value.toUpperCase();
+            this.setSelectionRange(pos, pos);
+        });
+    }
+
     $(function () {
         if (typeof gmcAjaxUrl === 'undefined') {
             return;
@@ -187,5 +227,6 @@
         initCategoryTypeahead();
         initCategoryMappingSave();
         initDiagnostics();
+        initShippingRates();
     });
 })(jQuery);

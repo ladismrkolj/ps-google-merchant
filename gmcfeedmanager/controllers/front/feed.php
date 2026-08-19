@@ -305,6 +305,34 @@ class GmcfeedmanagerFeedModuleFrontController extends ModuleFrontController
             }
         }
 
+        if (!empty($data['checkout_link_template'])) {
+            $writer->writeElement('g:checkout_link_template', (string) $data['checkout_link_template']);
+        }
+
+        if (!empty($data['return_policy_label'])) {
+            $writer->writeElement('g:return_policy_label', (string) $data['return_policy_label']);
+        }
+
+        // g:shipping is the one repeated *nested* attribute in the spec:
+        // one block per destination, each carrying its own price and
+        // currency, which is what lets a feed quote a different currency
+        // per country.
+        foreach ((array) ($data['shipping'] ?? []) as $shipping) {
+            $writer->startElement('g:shipping');
+            $writer->writeElement('g:country', (string) ($shipping['country'] ?? ''));
+
+            if (!empty($shipping['region'])) {
+                $writer->writeElement('g:region', (string) $shipping['region']);
+            }
+
+            if (!empty($shipping['service'])) {
+                $writer->writeElement('g:service', (string) $shipping['service']);
+            }
+
+            $writer->writeElement('g:price', (string) ($shipping['price'] ?? ''));
+            $writer->endElement(); // g:shipping
+        }
+
         $writer->endElement(); // item
     }
 
